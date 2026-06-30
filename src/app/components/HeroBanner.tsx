@@ -49,22 +49,22 @@ export function HeroBanner() {
   const scrollNext = useCallback(() => emblaApi?.scrollNext(), [emblaApi]);
   const scrollTo = useCallback((index: number) => emblaApi?.scrollTo(index), [emblaApi]);
 
-  const onSelect = useCallback(() => {
+  const handleSlideChange = useCallback(() => {
     if (!emblaApi) return;
     setSelectedIndex(emblaApi.selectedScrollSnap());
   }, [emblaApi]);
 
   useEffect(() => {
     if (!emblaApi) return;
-    emblaApi.on("select", onSelect);
-    onSelect();
-  }, [emblaApi, onSelect]);
+    emblaApi.on("select", handleSlideChange);
+    handleSlideChange();
+  }, [emblaApi, handleSlideChange]);
 
-  // Auto-play
+  // Troca de slide automática (a cada 5s)
   useEffect(() => {
     if (!emblaApi) return;
-    const interval = setInterval(() => emblaApi.scrollNext(), 5000);
-    return () => clearInterval(interval);
+    const autoPlayTimer = setInterval(() => emblaApi.scrollNext(), 5000);
+    return () => clearInterval(autoPlayTimer);
   }, [emblaApi]);
 
   return (
@@ -172,15 +172,15 @@ export function HeroBanner() {
 
       {/* Dots */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
-        {slides.map((_, i) => (
+        {slides.map((_, dotIndex) => (
           <button
-            key={i}
-            onClick={() => scrollTo(i)}
+            key={dotIndex}
+            onClick={() => scrollTo(dotIndex)}
             className="rounded-full transition-all"
             style={{
-              width: selectedIndex === i ? "24px" : "8px",
+              width: selectedIndex === dotIndex ? "24px" : "8px",
               height: "8px",
-              backgroundColor: selectedIndex === i ? "#DCBE50" : "rgba(220,190,80,0.35)",
+              backgroundColor: selectedIndex === dotIndex ? "#DCBE50" : "rgba(220,190,80,0.35)",
             }}
           />
         ))}

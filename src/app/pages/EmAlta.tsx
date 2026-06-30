@@ -22,9 +22,9 @@ export function EmAlta() {
 
       {/* Placeholder dos cards (grid responsivo). Será preenchido depois. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-        {Array.from({ length: 8 }).map((_, i) => (
+        {Array.from({ length: 8 }).map((_, cardIndex) => (
           <div
-            key={i}
+            key={cardIndex}
             className="aspect-[3/4] rounded-xl border border-white/5 flex items-center justify-center"
             style={{ backgroundColor: "#1B1F22" }}
           >
