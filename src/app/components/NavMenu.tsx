@@ -15,8 +15,10 @@ const navMenuItems = [
 
 // Estilo base compartilhado pelos três tipos de item (div, link e botão).
 // Centralizar aqui evita repetir a mesma string e mantém a aparência consistente.
+// Celular: ícone em cima e texto embaixo (flex-col), compacto para caber os 5 itens.
+// md+: volta ao formato original, ícone ao lado do texto (flex-row).
 const itemBaseClasses =
-  "flex items-center gap-2 px-5 py-3 text-sm transition-all whitespace-nowrap relative";
+  "flex flex-col md:flex-row items-center gap-1 md:gap-2 px-1.5 sm:px-3 md:px-5 py-2.5 md:py-3 text-xs md:text-sm transition-all whitespace-nowrap relative";
 
 export function NavMenu() {
   // Guarda o rótulo do item atualmente ativo. Começa vazio: nada fica
@@ -25,15 +27,17 @@ export function NavMenu() {
 
   return (
     <nav className="w-full shadow-md" style={{ backgroundColor: "#2C2422" }}>
-      <div className="max-w-7xl mx-auto px-4">
-        <ul className="flex items-center gap-1">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4">
+        {/* Celular: itens distribuídos na largura toda (justify-between).
+            md+: alinhados à esquerda como antes. */}
+        <ul className="flex items-center justify-between md:justify-start gap-0 md:gap-1">
           {navMenuItems.map(({ icon: Icon, label, submenuItems, path }) => {
             const isActive = activeLabel === label;
 
             // Conteúdo visual do item: ícone + texto + linha amarela inferior.
             const menuItemContent = (
               <>
-                <Icon className="w-4 h-4" />
+                <Icon className="w-5 h-5 md:w-4 md:h-4" />
                 <span>{label}</span>
                 {/* Linha amarela: visível se ativo, ou ao passar o mouse (group-hover). */}
                 <span

@@ -79,6 +79,11 @@
 }
 
 @theme inline {
+  /* Breakpoints extras para telas grandes (os padrão do Tailwind param em 2xl = 1536px).
+     3xl cobre Full HD/QHD; 4xl cobre QHD largo, ultrawide (3440px) e 4K. */
+  --breakpoint-3xl: 120rem; /* 1920px */
+  --breakpoint-4xl: 160rem; /* 2560px */
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
