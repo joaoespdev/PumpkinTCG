@@ -1,13 +1,19 @@
 // ============================================================================
-// Módulo de acesso à API Magic: The Gathering (https://docs.magicthegathering.io)
+// Módulo de acesso à API Scryfall (https://scryfall.com/docs/api)
 // Centralizar as chamadas HTTP aqui mantém os componentes limpos: eles só
 // chamam searchCards() / getCardById() e não precisam saber a URL nem o fetch.
+//
+// A interface pública (MtgCard e as 4 funções) é a MESMA da versão anterior
+// (magicthegathering.io), então Navbar e CardPage não precisaram mudar.
+// O que o Scryfall devolve diferente é normalizado em toMtgCard():
+//   - legalities vem como objeto ({ standard: "legal" }) -> viramos array
+//   - rarity/set vêm em minúsculas -> capitalizamos para exibição
+//   - imagem vem em image_uris (ou card_faces, em cartas dupla-face)
 // ============================================================================
 
-const API_BASE_URL = "https://api.magicthegathering.io/v1";
+const API_BASE_URL = "https://api.scryfall.com";
 
-// Formato de uma carta (só os campos que usamos). A API retorna mais campos,
-// mas declarar só o necessário deixa claro no que dependemos.
+// Formato de uma carta usado pelo app (só os campos que usamos).
 export interface MtgCard {
   id: string;
   name: string;
@@ -17,6 +23,7 @@ export interface MtgCard {
   rarity?: string;        // ex.: "Rare"
   set?: string;           // código da coleção, ex.: "2X2"
   setName?: string;       // nome da coleção, ex.: "Double Masters 2022"
+  collectorNumber?: string; // nº de coletor, ex.: "249" (diferencia artes no mesmo set)
   artist?: string;
   text?: string;          // texto de regras
   flavor?: string;        // texto de ambientação (itálico)
@@ -25,46 +32,147 @@ export interface MtgCard {
   legalities?: { format: string; legality: string }[];
 }
 
-// As imagens da API vêm em http://; forçamos https:// para evitar bloqueio
-// de "conteúdo misto" quando o site estiver publicado com HTTPS.
-function toHttps(url?: string): string | undefined {
-  return url?.replace(/^http:\/\//, "https://");
+// Formato bruto da carta como o Scryfall devolve (só o que nos interessa).
+interface ScryfallCard {
+  id: string;
+  name: string;
+  mana_cost?: string;
+  type_line?: string;
+  rarity?: string;
+  set?: string;
+  set_name?: string;
+  collector_number?: string;
+  illustration_id?: string; // mesma arte => mesmo id (ex.: normal e surge foil)
+  layout?: string;          // "token", "art_series", "emblem", ...
+  oversized?: boolean;      // cartas superdimensionadas (não jogáveis)
+  artist?: string;
+  oracle_text?: string;
+  flavor_text?: string;
+  power?: string;
+  toughness?: string;
+  image_uris?: { normal?: string; large?: string };
+  // Cartas dupla-face não têm image_uris/textos na raiz; vêm por face.
+  card_faces?: {
+    image_uris?: { normal?: string; large?: string };
+    mana_cost?: string;
+    oracle_text?: string;
+    flavor_text?: string;
+  }[];
+  legalities?: Record<string, string>;
 }
 
-function normalizeCard(card: MtgCard): MtgCard {
-  return { ...card, imageUrl: toHttps(card.imageUrl) };
+interface ScryfallList {
+  data: ScryfallCard[];
+  has_more?: boolean;
+  next_page?: string; // URL pronta da próxima página (quando has_more)
+}
+
+// Usamos include_extras=true para não esconder sets "memorabilia" (ex.:
+// Ponies: The Galloping, gold-bordered de Campeonato Mundial), que são
+// itens vendáveis. O efeito colateral é a busca passar a devolver também
+// tokens, art series etc. — que NÃO são cartas do catálogo; filtramos aqui.
+const EXCLUDED_LAYOUTS = new Set([
+  "token",
+  "double_faced_token",
+  "art_series",
+  "emblem",
+]);
+
+function isCatalogCard(card: ScryfallCard): boolean {
+  return !EXCLUDED_LAYOUTS.has(card.layout ?? "") && !card.oversized;
+}
+
+// Executa uma busca /cards/search e segue a paginação (175 cartas/página)
+// até maxPages. 404 do Scryfall significa "sem resultados" => lista vazia.
+async function fetchSearchAllPages(
+  params: string,
+  maxPages: number,
+  errorLabel: string
+): Promise<ScryfallCard[]> {
+  let url: string | undefined =
+    `${API_BASE_URL}/cards/search?${params}&include_extras=true`;
+  const cards: ScryfallCard[] = [];
+
+  for (let page = 0; url && page < maxPages; page++) {
+    const response = await fetch(url);
+    if (response.status === 404) return cards;
+    if (!response.ok) {
+      throw new Error(`${errorLabel} (HTTP ${response.status})`);
+    }
+    const data: ScryfallList = await response.json();
+    cards.push(...(data.data ?? []));
+    url = data.has_more ? data.next_page : undefined;
+  }
+  return cards;
+}
+
+// "rare" -> "Rare", "standard" -> "Standard"
+function capitalize(value?: string): string | undefined {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : undefined;
+}
+
+// Converte o formato do Scryfall para o nosso MtgCard.
+function toMtgCard(card: ScryfallCard): MtgCard {
+  // Em cartas dupla-face, imagem e textos ficam dentro de card_faces.
+  const face = card.card_faces?.[0];
+
+  return {
+    id: card.id,
+    name: card.name,
+    imageUrl: card.image_uris?.normal ?? face?.image_uris?.normal,
+    manaCost: card.mana_cost ?? face?.mana_cost,
+    type: card.type_line,
+    rarity: capitalize(card.rarity),
+    set: card.set?.toUpperCase(),
+    setName: card.set_name,
+    collectorNumber: card.collector_number,
+    artist: card.artist,
+    text: card.oracle_text ?? face?.oracle_text,
+    flavor: card.flavor_text ?? face?.flavor_text,
+    power: card.power,
+    toughness: card.toughness,
+    // Objeto -> array, com valores no formato antigo ("legal" -> "Legal"),
+    // para o CardPage continuar filtrando por legality === "Legal".
+    legalities: card.legalities
+      ? Object.entries(card.legalities).map(([format, legality]) => ({
+          format: capitalize(format) ?? format,
+          legality: capitalize(legality) ?? legality,
+        }))
+      : undefined,
+  };
 }
 
 // Busca cartas por nome (parcial). Retorna a lista de cartas encontradas.
-// Lança erro se a requisição falhar, para o componente tratar.
 export async function searchCards(name: string): Promise<MtgCard[]> {
   const query = name.trim();
   if (!query) return [];
 
-  const response = await fetch(
-    `${API_BASE_URL}/cards?name=${encodeURIComponent(query)}&pageSize=20`
+  // name:"..." busca por trecho do nome; unique=cards traz 1 por nome
+  // (sem repetir impressões), ideal para sugestões de busca.
+  const q = `name:"${query.replace(/"/g, "")}"`;
+  const cards = await fetchSearchAllPages(
+    `q=${encodeURIComponent(q)}&unique=cards&order=name`,
+    1, // 1 página basta para sugestões
+    "Falha na busca"
   );
-  if (!response.ok) {
-    throw new Error(`Falha na busca (HTTP ${response.status})`);
-  }
-
-  const data: { cards: MtgCard[] } = await response.json();
-  return (data.cards ?? []).map(normalizeCard);
+  return cards.filter(isCatalogCard).slice(0, 20).map(toMtgCard);
 }
 
 // Busca uma única carta pelo id (usado na página de detalhe).
 export async function getCardById(id: string): Promise<MtgCard | null> {
   const response = await fetch(`${API_BASE_URL}/cards/${encodeURIComponent(id)}`);
+  if (response.status === 404) return null;
   if (!response.ok) {
     throw new Error(`Carta não encontrada (HTTP ${response.status})`);
   }
 
-  const data: { card: MtgCard } = await response.json();
-  return data.card ? normalizeCard(data.card) : null;
+  const data: ScryfallCard = await response.json();
+  return toMtgCard(data);
 }
 
-// A busca traz várias "impressões" da mesma carta (mesmo nome em vários sets).
-// Para as sugestões, queremos cada nome só uma vez — mantendo a 1ª que tiver id.
+// A busca pode trazer nomes repetidos; mantém cada nome só uma vez.
+// (Com unique=cards o Scryfall já deduplica, mas mantemos por segurança
+// e para não mudar o contrato com a Navbar.)
 export function dedupeByName(cards: MtgCard[]): MtgCard[] {
   const seen = new Set<string>();
   const unique: MtgCard[] = [];
@@ -77,30 +185,32 @@ export function dedupeByName(cards: MtgCard[]): MtgCard[] {
   return unique;
 }
 
-// Busca todas as impressões (versões em coleções diferentes) de UMA carta,
-// pelo nome exato. Usado no seletor de versões da página de detalhe.
-// Retorna só as que têm imagem, uma por coleção (set).
+// Busca todas as impressões (versões) de UMA carta, pelo nome exato.
+// Usado no seletor de versões da página de detalhe.
+// !"Nome" = nome exato; unique=prints = todas as impressões.
+//
+// Um mesmo set pode ter VÁRIAS versões (ex.: Sol Ring tem 4 artes no
+// Commander de Warhammer 40k), então NÃO deduplicamos por set. Deduplicamos
+// por arte (set + illustration_id): isso mantém as 4 artes e evita repetir
+// entradas que só mudam o acabamento (ex.: surge foil "249★" vs "249").
 export async function getCardPrintings(name: string): Promise<MtgCard[]> {
-  const response = await fetch(
-    `${API_BASE_URL}/cards?name=${encodeURIComponent(name)}&pageSize=100`
+  const q = `!"${name.replace(/"/g, "")}"`;
+  const raw = await fetchSearchAllPages(
+    `q=${encodeURIComponent(q)}&unique=prints&order=released`,
+    4, // até 700 impressões — cobre até as cartas mais reimpressas
+    "Falha ao buscar versões"
   );
-  if (!response.ok) {
-    throw new Error(`Falha ao buscar versões (HTTP ${response.status})`);
-  }
 
-  const data: { cards: MtgCard[] } = await response.json();
-  const all = (data.cards ?? []).map(normalizeCard);
-
-  // Mantém só as que têm exatamente este nome e possuem imagem.
-  const exactWithImage = all.filter((card) => card.name === name && card.imageUrl);
-
-  // Uma impressão por coleção (evita repetir o mesmo set várias vezes).
-  const seenSets = new Set<string>();
+  const seenArts = new Set<string>();
   const printings: MtgCard[] = [];
-  for (const card of exactWithImage) {
-    const setKey = card.set ?? card.id;
-    if (!seenSets.has(setKey)) {
-      seenSets.add(setKey);
+  for (const scryfallCard of raw.filter(isCatalogCard)) {
+    const card = toMtgCard(scryfallCard);
+    if (!card.imageUrl) continue;
+    const artKey = `${scryfallCard.set}:${
+      scryfallCard.illustration_id ?? scryfallCard.collector_number ?? scryfallCard.id
+    }`;
+    if (!seenArts.has(artKey)) {
+      seenArts.add(artKey);
       printings.push(card);
     }
   }

@@ -105,7 +105,7 @@ export function CardPage() {
                   <button
                     key={printing.id}
                     onClick={() => setDisplayedCard(printing)}
-                    title={printing.setName || printing.set}
+                    title={`${printing.setName || printing.set}${printing.collectorNumber ? ` #${printing.collectorNumber}` : ""}`}
                     className="w-11 h-11 3xl:w-13 3xl:h-13 rounded-md flex items-center justify-center text-[10px] font-bold transition-all flex-shrink-0"
                     style={{
                       backgroundColor: isSelected ? "#DCBE50" : "#1B1F22",
