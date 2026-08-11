@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    // "nodenext" substitui o antigo commonjs + moduleResolution node10
+    // (deprecados no TS 7). Sem "type": "module" no package.json, a saída
+    // continua sendo CommonJS — nada muda em runtime.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "sourceMap": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    // DTOs do Nest são classes preenchidas pelo ValidationPipe, não pelo
+    // construtor — sem esta flag o TS reclamaria de campo "não inicializado".
+    "strictPropertyInitialization": false,
+    // Os dois abaixo são o que faz @Injectable/@Controller funcionarem.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  // Só src: o seed roda via tsx e não precisa entrar no build do Nest.
+  // (Incluir prisma/seed.ts aqui mudaria a estrutura do dist/ e quebraria
+  // o start:prod, que espera dist/main.js.)
+  "include": ["src"]
+}

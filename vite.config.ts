@@ -33,4 +33,12 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  server: {
+    // Em dev, o frontend chama /api e o Vite repassa pro backend Nest
+    // (porta 3333). O navegador só fala com uma origem — sem dor de CORS.
+    proxy: {
+      '/api': 'http://localhost:3333',
+    },
+  },
 })

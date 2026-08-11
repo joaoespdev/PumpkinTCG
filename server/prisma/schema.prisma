@@ -1,0 +1,199 @@
+// ============================================================================
+// TCGPumpkin — modelo de estoque
+//
+// Ideia central: SALDO e EXTRATO são tabelas separadas.
+//   - StockItem.quantity  = o saldo (rápido de ler)
+//   - StockMovement       = o extrato (append-only, nunca editado nem apagado)
+// O saldo é sempre a soma dos deltas do extrato. Se divergir, tem bug.
+//
+// Prisma 7: a URL de conexão NÃO fica neste arquivo. Ela vive em
+// prisma.config.ts (para o CLI e as migrations) e no driver adapter
+// (para as queries em runtime). Tutoriais antigos mostram `url = env(...)`
+// dentro do bloco datasource — isso é Prisma 6 e não funciona mais.
+// ============================================================================
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs" // o Nest compila para CommonJS; o client gerado segue junto
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum ProductKind {
+  CARD // carta avulsa (dados vêm do Scryfall)
+  SEALED // produto lacrado: booster box, deck, bundle, collector booster
+  ACCESSORY // sleeve, playmat, deck box, dado
+}
+
+enum ProductSource {
+  SCRYFALL // catalogado a partir da API
+  MANUAL // cadastrado à mão por você
+}
+
+enum Finish {
+  NONFOIL
+  FOIL
+  ETCHED
+}
+
+// Padrão de mercado para condição de carta.
+enum Condition {
+  NM // Near Mint
+  SP // Slightly Played
+  MP // Moderately Played
+  HP // Heavily Played
+  D // Damaged
+}
+
+enum MovementType {
+  IN // entrada de estoque (compra, abertura de booster)
+  OUT // saída que não é venda (perda, dano, devolução ao fornecedor)
+  SALE // venda
+  ADJUST // correção de inventário (nunca edite um movimento: lance um ADJUST)
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+// ============================================================================
+// 1. QUEM — espelha o usuário do Supabase Auth (mesmo uuid).
+// ============================================================================
+
+model User {
+  id        String   @id // mesmo id de auth.users no Supabase
+  email     String   @unique
+  name      String?
+  role      Role     @default(STAFF)
+  createdAt DateTime @default(now())
+
+  stockItems StockItem[]
+  movements  StockMovement[]
+
+  @@map("users")
+}
+
+// ============================================================================
+// 2. O QUE EXISTE — catálogo. Não tem preço nem quantidade.
+//
+// Sobre IDs: a chave primária é NOSSA (uuid). O id do Scryfall entra como
+// `externalId`, que é referência externa, não identidade. Isso mantém as
+// rotas uniformes (carta e booster box têm o mesmo formato de id) e permite
+// adicionar outra fonte no futuro sem mexer no schema.
+// ============================================================================
+
+model Product {
+  id     String        @id @default(uuid())
+  kind   ProductKind
+  source ProductSource
+
+  // Id da IMPRESSÃO no Scryfall (set + nº de coletor + arte já estão embutidos).
+  // Null para produtos cadastrados à mão.
+  externalId String?
+
+  name            String
+  setCode         String? // ex.: "C21"
+  setName         String? // ex.: "Commander 2021"
+  collectorNumber String? // ex.: "249"
+  imageUrl        String?
+
+  // Campos específicos por tipo de produto, sem precisar de coluna nova.
+  // Ex. sealed: { "boosters": 36, "idioma": "pt" }
+  attributes Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete: some da loja, permanece no histórico
+
+  stockItems StockItem[]
+
+  // Impede cadastrar a mesma impressão do Scryfall duas vezes.
+  @@unique([source, externalId])
+  @@index([name])
+  @@index([setCode, collectorNumber])
+  @@map("products")
+}
+
+// ============================================================================
+// 3. O SALDO — o que está à venda, quanto tem e por quanto.
+//
+// finish/condition/language ficam AQUI e não em Product porque descrevem a
+// SUA cópia física, não a impressão. Detalhe importante: foil e não-foil da
+// mesma carta compartilham o mesmo id do Scryfall, mas são produtos
+// diferentes com preços diferentes — por isso `finish` entra no @@unique.
+// ============================================================================
+
+model StockItem {
+  id String @id @default(uuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  // Hoje é sempre a loja. A coluna já existe para virar multi-vendedor
+  // depois sem migração dolorosa.
+  sellerId String
+  seller   User   @relation(fields: [sellerId], references: [id])
+
+  finish    Finish    @default(NONFOIL)
+  condition Condition @default(NM)
+  language  String    @default("pt")
+
+  quantity   Int // <- o SALDO. CHECK (quantity >= 0) vem na migration.
+  priceCents Int // centavos, sempre inteiro. Nunca use float para dinheiro.
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  movements StockMovement[]
+
+  @@unique([productId, sellerId, finish, condition, language])
+  @@index([productId])
+  @@map("stock_items")
+}
+
+// ============================================================================
+// 4. O EXTRATO — append-only. Nunca UPDATE, nunca DELETE.
+//
+// Errou uma entrada? Não corrija a linha: lance um ADJUST de correção.
+// Assim o extrato conta a história inteira, inclusive os erros.
+// Auditoria de graça: SUM(quantityDelta) tem que bater com StockItem.quantity.
+// ============================================================================
+
+model StockMovement {
+  id String @id @default(uuid())
+
+  stockItemId String
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
+
+  type          MovementType
+  quantityDelta Int // +5 entrada, -2 saída
+  balanceAfter  Int // saldo resultante — facilita auditoria sem recalcular tudo
+
+  // Preço CONGELADO no momento do movimento. O preço do StockItem muda
+  // com o tempo; este não. É o que permite saber por quanto o item entrou
+  // ou saiu, mesmo anos depois.
+  unitPriceCents Int
+
+  // De onde veio o lote. Texto livre e opcional: pode ser o nome de um
+  // distribuidor, "compra de cliente", "abertura de booster" ou vazio.
+  supplier String?
+
+  actorId String // quem executou a ação
+  actor   User   @relation(fields: [actorId], references: [id])
+
+  note       String?
+  occurredAt DateTime @default(now())
+
+  @@index([stockItemId, occurredAt])
+  @@index([occurredAt])
+  @@map("stock_movements")
+}

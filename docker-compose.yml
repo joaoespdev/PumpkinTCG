@@ -1,0 +1,28 @@
+# ============================================================================
+# Postgres LOCAL para desenvolvimento — opcional.
+#
+# Docker aqui não substitui o Prisma nem o Supabase: ele só LIGA um banco
+# na sua máquina. As migrations continuam sendo do Prisma, e são as mesmas
+# nos dois lugares — é isso que mantém dev e produção idênticos.
+#
+# Uso:
+#   docker compose up -d      # sobe o banco (persiste no volume pgdata)
+#   docker compose down       # derruba (os dados ficam)
+#
+# Depois aponte o server/.env para ele (URLs comentadas no .env.example).
+# ============================================================================
+services:
+  db:
+    image: postgres:17
+    container_name: tcgpumpkin-db
+    environment:
+      POSTGRES_USER: tcg
+      POSTGRES_PASSWORD: tcg
+      POSTGRES_DB: tcgpumpkin
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
