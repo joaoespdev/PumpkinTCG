@@ -67,6 +67,13 @@ curl http://localhost:3333/api/stock
 
 ## Pendências conhecidas
 
+- **User-Agent do Scryfall**: hoje o `ScryfallService` se identifica como
+  `TCGPumpkin/0.1`. O Scryfall pede que aplicações incluam uma forma de
+  contato (site ou e-mail) para conseguirem avisar antes de bloquear um
+  cliente que esteja fazendo requisição demais. Quando existir domínio,
+  trocar por `TCGPumpkin/0.1 (+https://SEU-DOMINIO)`. Não tem relação com
+  as URLs do site — é só identificação do cliente HTTP.
+
 - **Auth (Parte 4)**: hoje `actorId`/`sellerId` vêm de `STORE_USER_ID` (seed).
   Vai ser substituído por AuthGuard validando o JWT do Supabase.
 - Corrida entre requisições simultâneas no upsert (P2002) e idempotência do

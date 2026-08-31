@@ -15,6 +15,15 @@ import { Finish } from "../../generated/prisma/client";
 
 const API_BASE_URL = "https://api.scryfall.com";
 
+// O Scryfall EXIGE os cabeçalhos User-Agent e Accept. Requisição sem eles é
+// recusada com HTTP 400 — que aqui virava um 502 "Scryfall respondeu HTTP 400".
+// O fetch do Node não manda nenhum dos dois por padrão; no navegador funciona
+// porque o próprio browser preenche. Docs: scryfall.com/docs/api
+const SCRYFALL_HEADERS = {
+  "User-Agent": "TCGPumpkin/0.1",
+  Accept: "application/json;q=0.9,*/*;q=0.8",
+} as const;
+
 // Só o que o Product precisa — irmão do ScryfallCard do frontend (mtg.ts).
 interface ScryfallCardResponse {
   id: string;
@@ -49,7 +58,8 @@ const FINISH_MAP: Record<string, Finish> = {
 export class ScryfallService {
   async getCardForProduct(externalId: string): Promise<ScryfallProductData> {
     const response = await fetch(
-      `${API_BASE_URL}/cards/${encodeURIComponent(externalId)}`
+      `${API_BASE_URL}/cards/${encodeURIComponent(externalId)}`,
+      { headers: SCRYFALL_HEADERS }
     );
     if (response.status === 404) {
       throw new NotFoundException(
