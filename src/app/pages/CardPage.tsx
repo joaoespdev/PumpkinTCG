@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router";
 import { Heart, MoreVertical, ChevronLeft } from "lucide-react";
 import { getCardById, getCardPrintings, type MtgCard } from "../api/mtg";
+import { StockOffers } from "../components/StockOffers";
 
 export function CardPage() {
   // Pega o :id da URL (ex.: /card/abc123 -> id = "abc123").
@@ -189,19 +190,13 @@ export function CardPage() {
             </div>
           )}
 
-          {/* Preço — a API não fornece; placeholder "em breve" */}
+          {/* Estoque real da loja, vindo do nosso backend (não do Scryfall).
+              card.id é o id do Scryfall da impressão exibida: trocar de versão
+              na coluna da esquerda troca o estoque consultado. */}
           <h2 className="text-sm font-bold uppercase tracking-wide mb-3" style={{ color: "#DCBE50" }}>
-            Preço Médio de Venda
+            Estoque da Loja
           </h2>
-          <div
-            className="rounded-lg p-4 flex items-center justify-between"
-            style={{ backgroundColor: "#1B1F22" }}
-          >
-            <span className="text-sm" style={{ color: "#C3ACA2" }}>Normal</span>
-            <span className="text-sm font-semibold" style={{ color: "#C3ACA2" }}>
-              Preço indisponível — em breve
-            </span>
-          </div>
+          <StockOffers externalId={card.id} />
         </div>
       </div>
     </section>
