@@ -129,19 +129,29 @@ export class StockRepository {
 
   listItems(
     db: Db,
-    filter: { productId?: string; search?: string },
+    filter: { productId?: string; externalId?: string; search?: string },
     take: number,
     skip: number
   ) {
+    // externalId e search filtram pelo PRODUTO relacionado, não pelo item.
+    // Montamos um objeto só: dois spreads com a chave `product` fariam o
+    // segundo sobrescrever o primeiro em silêncio.
+    const productFilter: Prisma.ProductWhereInput = {
+      // source junto do externalId porque a unicidade no schema é do PAR
+      // (source, externalId) — id do Scryfall só é único dentro do Scryfall.
+      ...(filter.externalId
+        ? { source: "SCRYFALL", externalId: filter.externalId }
+        : {}),
+      ...(filter.search
+        ? { name: { contains: filter.search, mode: "insensitive" } }
+        : {}),
+    };
+
     const where: Prisma.StockItemWhereInput = {
       deletedAt: null,
       ...(filter.productId ? { productId: filter.productId } : {}),
-      ...(filter.search
-        ? {
-            product: {
-              name: { contains: filter.search, mode: "insensitive" },
-            },
-          }
+      ...(Object.keys(productFilter).length > 0
+        ? { product: productFilter }
         : {}),
     };
     return db.stockItem.findMany({

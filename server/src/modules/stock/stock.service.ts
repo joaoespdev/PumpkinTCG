@@ -239,7 +239,11 @@ export class StockService {
   list(query: ListStockQuery) {
     return this.repo.listItems(
       this.prisma,
-      { productId: query.productId, search: query.search },
+      {
+        productId: query.productId,
+        externalId: query.externalId,
+        search: query.search,
+      },
       query.take ?? 50,
       query.skip ?? 0,
     );
