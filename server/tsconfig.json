@@ -11,6 +11,13 @@
     "rootDir": "./src",
     "sourceMap": true,
     "incremental": true,
+    // O cache do build incremental PRECISA morar dentro do outDir.
+    // O nest-cli.json usa deleteOutDir, que apaga o dist/ antes de compilar.
+    // Com o cache fora do dist/, ele sobrevive a essa limpeza: o tsc consulta
+    // um cache que diz "ja emiti todos esses arquivos", pula a emissao e
+    // deixa o dist/ com um arquivo so — build "Found 0 errors" e app que nao
+    // sobe. Dentro do dist/, os dois sao apagados juntos e nunca divergem.
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
