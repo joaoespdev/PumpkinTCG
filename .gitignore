@@ -26,6 +26,10 @@ server/src/generated/
 .env.local
 .env.*.local
 
+# Coleção do Postman (local por enquanto — remover daqui para versionar
+# junto quando as rotas estabilizarem)
+server/postman/
+
 # Arquivos do sistema operacional
 .DS_Store
 Thumbs.db
