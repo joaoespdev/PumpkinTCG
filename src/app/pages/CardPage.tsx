@@ -76,6 +76,18 @@ export function CardPage() {
     .filter((entry) => entry.legality === "Legal")
     .map((entry) => entry.format);
 
+  // Quantas impressões cada set tem nesta lista. Um set com mais de uma
+  // impressão precisa de rótulo mais específico no botão: só o código do
+  // set faria dois botões idênticos para produtos de preços diferentes.
+  const printingsPerSet = printings.reduce<Record<string, number>>(
+    (acc, printing) => {
+      const setCode = printing.set ?? "?";
+      acc[setCode] = (acc[setCode] ?? 0) + 1;
+      return acc;
+    },
+    {}
+  );
+
   return (
     <section className="max-w-7xl 3xl:max-w-[1600px] 4xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 3xl:py-12">
       {/* Voltar */}
@@ -102,12 +114,19 @@ export function CardPage() {
             >
               {printings.map((printing) => {
                 const isSelected = printing.id === card.id;
+                // Sets com mais de uma impressão ganham o número de coletor
+                // embaixo do código. É ele que carrega o ★ das versões
+                // especiais (ex.: "249★" = surge foil, produto e preço
+                // diferentes da "249").
+                const showCollectorNumber =
+                  (printingsPerSet[printing.set ?? "?"] ?? 0) > 1 &&
+                  Boolean(printing.collectorNumber);
                 return (
                   <button
                     key={printing.id}
                     onClick={() => setDisplayedCard(printing)}
                     title={`${printing.setName || printing.set}${printing.collectorNumber ? ` #${printing.collectorNumber}` : ""}`}
-                    className="w-11 h-11 3xl:w-13 3xl:h-13 rounded-md flex items-center justify-center text-[10px] font-bold transition-all flex-shrink-0"
+                    className="w-11 h-11 3xl:w-13 3xl:h-13 rounded-md flex flex-col items-center justify-center gap-px px-0.5 font-bold transition-all flex-shrink-0"
                     style={{
                       backgroundColor: isSelected ? "#DCBE50" : "#1B1F22",
                       color: isSelected ? "#2C2422" : "#C3ACA2",
@@ -119,7 +138,12 @@ export function CardPage() {
                       do set (ex.: "2X2"). Quando tiver as imagens dos ícones, troque
                       este <span> por: <img src={iconePorSet[printing.set]} ... />
                     */}
-                    <span>{printing.set}</span>
+                    <span className="text-[10px] leading-none">{printing.set}</span>
+                    {showCollectorNumber && (
+                      <span className="text-[8px] leading-none font-semibold opacity-75 max-w-full truncate">
+                        {printing.collectorNumber}
+                      </span>
+                    )}
                   </button>
                 );
               })}

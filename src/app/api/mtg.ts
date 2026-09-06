@@ -189,10 +189,15 @@ export function dedupeByName(cards: MtgCard[]): MtgCard[] {
 // Usado no seletor de versões da página de detalhe.
 // !"Nome" = nome exato; unique=prints = todas as impressões.
 //
-// Um mesmo set pode ter VÁRIAS versões (ex.: Sol Ring tem 4 artes no
-// Commander de Warhammer 40k), então NÃO deduplicamos por set. Deduplicamos
-// por arte (set + illustration_id): isso mantém as 4 artes e evita repetir
-// entradas que só mudam o acabamento (ex.: surge foil "249★" vs "249").
+// NÃO deduplicamos. O unique=prints já devolve cada impressão uma vez, e
+// cada impressão é um PRODUTO diferente, com preço próprio.
+//
+// Duas impressões do mesmo set podem repetir a arte: no Commander de
+// Warhammer 40k o Sol Ring tem 4 artes e 8 impressões, porque cada arte
+// vem também em surge foil, marcada com ★ no número de coletor ("249★").
+// A surge foil custa de 4 a 5 vezes o preço da normal. Colapsar as duas
+// pela arte esconderia a versão cara da loja — quem distingue os botões é
+// o número de coletor, não a figura.
 export async function getCardPrintings(name: string): Promise<MtgCard[]> {
   const q = `!"${name.replace(/"/g, "")}"`;
   const raw = await fetchSearchAllPages(
@@ -201,18 +206,9 @@ export async function getCardPrintings(name: string): Promise<MtgCard[]> {
     "Falha ao buscar versões"
   );
 
-  const seenArts = new Set<string>();
-  const printings: MtgCard[] = [];
-  for (const scryfallCard of raw.filter(isCatalogCard)) {
-    const card = toMtgCard(scryfallCard);
-    if (!card.imageUrl) continue;
-    const artKey = `${scryfallCard.set}:${
-      scryfallCard.illustration_id ?? scryfallCard.collector_number ?? scryfallCard.id
-    }`;
-    if (!seenArts.has(artKey)) {
-      seenArts.add(artKey);
-      printings.push(card);
-    }
-  }
-  return printings;
+  // Sem imagem não dá para montar o botão do seletor.
+  return raw
+    .filter(isCatalogCard)
+    .map(toMtgCard)
+    .filter((card) => Boolean(card.imageUrl));
 }
