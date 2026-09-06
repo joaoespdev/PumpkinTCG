@@ -10,6 +10,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { CreateEntryDto, EntryItemDto } from "./dto/create-entry.dto";
 import { CreateRemovalDto } from "./dto/create-removal.dto";
 import { ListStockQuery } from "./dto/list-stock.query";
+import { presentMovement, presentStockItem } from "./stock.presenter";
 import { ScryfallProductData, ScryfallService } from "./scryfall.service";
 import { StockRepository } from "./stock.repository";
 
@@ -236,8 +237,8 @@ export class StockService {
 
   // Leituras ------------------------------------------------------------------
 
-  list(query: ListStockQuery) {
-    return this.repo.listItems(
+  async list(query: ListStockQuery) {
+    const items = await this.repo.listItems(
       this.prisma,
       {
         productId: query.productId,
@@ -247,6 +248,7 @@ export class StockService {
       query.take ?? 50,
       query.skip ?? 0,
     );
+    return items.map(presentStockItem);
   }
 
   async findOne(stockItemId: string) {
@@ -254,12 +256,17 @@ export class StockService {
     if (!item || item.deletedAt) {
       throw new NotFoundException("Item de estoque não encontrado");
     }
-    return item;
+    return presentStockItem(item);
   }
 
   async updatePrice(stockItemId: string, priceCents: number) {
     await this.findOne(stockItemId); // garante que existe e não foi removido
-    return this.repo.updatePrice(this.prisma, stockItemId, priceCents);
+    const updated = await this.repo.updatePrice(
+      this.prisma,
+      stockItemId,
+      priceCents,
+    );
+    return presentStockItem(updated);
   }
 
   async listMovements(stockItemId: string) {
@@ -269,6 +276,7 @@ export class StockService {
     if (!item) {
       throw new NotFoundException("Item de estoque não encontrado");
     }
-    return this.repo.listMovements(this.prisma, stockItemId);
+    const movements = await this.repo.listMovements(this.prisma, stockItemId);
+    return movements.map(presentMovement);
   }
 }
